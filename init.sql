@@ -32,6 +32,7 @@ CREATE TABLE users (
     subscription_provider VARCHAR(20),
     stripe_customer_id VARCHAR(255) UNIQUE,
     stripe_subscription_id VARCHAR(255) UNIQUE,
+    stripe_account_id VARCHAR(255),
     billing_period_start TIMESTAMP WITH TIME ZONE,
     billing_period_end TIMESTAMP WITH TIME ZONE,
     trial_ends_at TIMESTAMP WITH TIME ZONE,
@@ -180,7 +181,38 @@ CREATE TABLE verification (
 CREATE TABLE stripe_webhook_events (
     id VARCHAR(255) PRIMARY KEY,
     type VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) NOT NULL DEFAULT 'processed',
+    claim_token VARCHAR(255),
+    lease_expires_at TIMESTAMPTZ
+);
+
+-- Stripe account routing (Prisma migration 20261106150000_stripe_account_routing)
+CREATE TABLE "stripe_account_migrations" (
+  "id" VARCHAR(255) PRIMARY KEY,
+  "user_id" VARCHAR(255) NOT NULL UNIQUE REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  "source_account" VARCHAR(255) NOT NULL,
+  "source_customer" VARCHAR(255) NOT NULL,
+  "source_subscription" VARCHAR(255) NOT NULL,
+  "destination_account" VARCHAR(255) NOT NULL,
+  "destination_customer" VARCHAR(255) NOT NULL,
+  "destination_subscription" VARCHAR(255),
+  "destination_schedule" VARCHAR(255),
+  "stage" VARCHAR(32) NOT NULL CHECK ("stage" IN ('prepared','source_stopped','destination_staged','destination_active','rollback_verified','cancelled')),
+  "revision" INTEGER NOT NULL DEFAULT 0,
+  "paid_through" TIMESTAMPTZ NOT NULL,
+  "source_stopped_verified" BOOLEAN NOT NULL DEFAULT false,
+  "source_resumed_verified" BOOLEAN NOT NULL DEFAULT false,
+  "destination_disabled_verified" BOOLEAN NOT NULL DEFAULT false,
+  "destination_paid_invoice" VARCHAR(255),
+  "cancellation_requested" BOOLEAN NOT NULL DEFAULT false,
+  "recovery_required" BOOLEAN NOT NULL DEFAULT false,
+  "review_reason" TEXT,
+  "livemode" BOOLEAN NOT NULL,
+  "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE ("source_account", "source_customer"),
+  UNIQUE ("destination_account", "destination_customer"),
+  CHECK ("source_account" <> "destination_account")
 );
 
 -- RevenueCat webhook idempotency table
